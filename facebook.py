@@ -1,0 +1,484 @@
+#detect the fake profiles in online social networks using Neural Network
+ importsys
+importcsv
+importos
+importdatetime
+importmath
+importnumpyasnp
+importpandasaspd
+importmatplotlib.pyplotasplt
+fromdatetimeimportdatetime
+importsexmachine.detectorasgender
+fromsklearn.preprocessingimportImputer
+fromsklearnimportcross_validation
+fromsklearnimportmetrics
+fromsklearnimportpreprocessing
+fromsklearn.linear_modelimportLinearRegression
+from sklearn.ensembleimportRandomForestClassifier
+fromsklearn.decompositionimportPCA
+fromsklearn.cross_validationimportStratifiedKFold,train_test_split
+fromsklearn.grid_searchimportGridSearchCV
+fromsklearn.metricsimportaccuracy_score
+fromsklearn.learning_curveimportlearning_curve
+fromsklearn.metricsimportroc_curve,auc,roc_auc_score
+fromsklearn.metricsimportconfusion_matrix
+fromsklearn.metricsimportclassification_report
+%matplotlibinline
+frompybrain.structureimportSigmoidLayer
+frompybrain.datasetsimportClassificationDataSet
+frompybrain.utilitiesimportpercentError
+frompybrain.tools.shortcutsimportbuildNetwork
+frompybrain.supervised.trainersimportBackpropTrainer
+frompybrain.structure.modulesimportSoftmaxLayer
+frompybrain.tools.xml.networkwriterimportNetworkWriter
+frompybrain.tools.xml.networkreaderimportNetworkReader
+function for reading dataset from csv files
+In[2]: defread_datasets():
+"""Readsusersprofilefromcsvfiles"""
+genuine_users=pd.read_csv("")
+fake_users=pd.read_csv("")
+#printgenuine_users.columns
+#printgenuine_users.describe()
+#printfake_users.describe()
+x=pd.concat([genuine_users,fake_users])
+y=len(fake_users)*[0]+len(genuine_users)*[1]
+returnx,y
+#function for predicting sex using name of person
+ defpredict_sex(name):
+sex_predictor=gender.Detector(unknown_value=u"unknown",case_sensitiv
+e=False)
+first_name=name.str.split('').str.get(0)
+sex=first_name.apply(sex_predictor.get_gender)
+sex_dict={'female':-2,'mostly_female':-1,'unknown':0,'mostly_mal
+e':1,'male':2}
+sex_code=sex.map(sex_dict).astype(int)
+returnsex_code
+#function for feature engineering
+ defextract_features(x):
+lang_list=list(enumerate(np.unique(x['lang'])))
+lang_dict={name:ifori,nameinlang_list}
+x.loc[:,'lang_code']=x['lang'].map(lambdax:lang_dict[x]).astype(int)
+x.loc[:,'sex_code']=predict_sex(x['name'])
+feature_columns_to_use=['statuses_count','followers_count','friend
+s_count','favourites_count','listed_count','sex_code','lang_code']
+x=x.loc[:,feature_columns_to_use]
+returnx
+#function for plotting confusion matrix
+
+ defplot_confusion_matrix(cm,title='Confusionmatrix',cmap=plt.cm.Blue
+s):
+target_names=['Fake','Genuine']
+plt.imshow(cm,interpolation='nearest',cmap=cmap)
+plt.title(title)
+plt.colorbar()
+tick_marks=np.arange(len(target_names))
+plt.xticks(tick_marks,target_names,rotation=45)
+plt.yticks(tick_marks,target_names)
+plt.tight_layout()
+plt.ylabel('Truelabel')
+plt.xlabel('Predictedlabel')
+#function for plotting ROC curve
+ defplot_roc_curve(y_test,y_pred):
+false_positive_rate,true_positive_rate,thresholds=roc_curve(y_test,y_pred)
+print("FalsePositiverate:",false_positive_rate)
+print("TruePositiverate:",true_positive_rate)
+roc_auc=auc(false_positive_rate,true_positive_rate)
+plt.title('ReceiverOperatingCharacteristic')
+plt.plot(false_positive_rate,true_positive_rate,'b',
+label='AUC=%0.2f'%roc_auc)
+plt.legend(loc='lowerright')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('TruePositiveRate')
+plt.xlabel('FalsePositiveRate')
+plt.show()
+#Function for training data using Neural Network
+
+ deftrain(X,y):
+ds=ClassificationDataSet(len(X.columns),1,nb_classes=2)
+forkinxrange(len(X)):
+ds.addSample(X.iloc[k],np.array(y[k]))
+tstdata,trndata=ds.splitWithProportion(0.20)
+trndata._convertToOneOfMany()
+tstdata._convertToOneOfMany()
+input_size=len(X.columns)
+target_size=1
+hidden_size=5
+fnn=None
+if os.path.isfile('fnn.xml'):
+fnn=NetworkReader.readFrom('fnn.xml')
+else:
+fnn=buildNetwork(trndata.indim,hidden_size,trndata.outdim,outclass=SoftmaxLayer)
+trainer=BackpropTrainer(fnn,dataset=trndata,momentum=0.05,learningrate=0.1,verbose=False,weightdecay=0.01)
+trainer.trainUntilConvergence(verbose=False,validationProportion=0.15,maxEpochs=100,continueEpochs=10)
+NetworkWriter.writeToFile(fnn,'oliv.xml')
+predictions=trainer.testOnClassData(dataset=tstdata)
+tstdata['class'],predictions
+In[8]: print"readingdatasets.....\n"
+x,y=read_datasets()
+x.describe()
+readingdatasets.....
+ print("extractingfeatues.....\n")
+x=extract_features(x)
+printx.columns
+printx.describe()
+ print("trainingdatasets.......\n")
+y_test,y_pred=train(x,y)
+ print'ClassificationAccuracyonTestdataset:',accuracy_score(y_test,
+y_pred)
+print('PercentErroronTestdataset:',percentError(y_pred,y_test))
+extractingfeatues.....
+Index([u'statuses_count',u'followers_count',u'friends_count',
+u'favourites_count',u'listed_count',u'sex_code',u'lang_code'],
+dtype='object')
+
+ClassificationAccuracyonTestdataset: 0.934280639432
+PercentErroronTestdataset: 6.57193605684
+In[13]: cm=confusion_matrix(y_test,y_pred)
+print('Confusionmatrix,withoutnormalization')
+print(cm)
+plot_confusion_matrix(cm)
+ cm_normalized=cm.astype('float')/cm.sum(axis=1)[:,np.newaxis]
+print('Normalizedconfusionmatrix')
+print(cm_normalized)
+plot_confusion_matrix(cm_normalized,title='Normalizedconfusionmatrix')
+Confusionmatrix,withoutnormalization
+
+ s=roc_auc_score(y_test,y_pred)
+print"roc_auc_score:",s
+ plot_roc_curve(y_test,y_pred)
+#Detect fake profiles in online social networks using Support Vector
+Machine
+ importsys
+importcsv
+importdatetime
+importnumpyasnp
+importpandasaspd
+importmatplotlib.pyplotasplt
+fromdatetimeimportdatetime
+importsexmachine.detectorasgender
+fromsklearn.preprocessingimportImputer
+fromsklearnimportcross_validation
+fromsklearnimportmetrics
+fromsklearnimportpreprocessing
+fromsklearn.linear_modelimportLinearRegression
+fromsklearn.svmimportSVC
+fromsklearn.metricsimportroc_curve,auc
+fromsklearn.cross_validationimportStratifiedKFold,train_test_split
+fromsklearn.grid_searchimportGridSearchCV
+fromsklearn.metricsimportaccuracy_score
+fromsklearn.learning_curveimportlearning_curve
+fromsklearn.metricsimportclassification_report
+fromsklearn.metricsimportconfusion_matrix
+%matplotlibinline
+#function for reading dataset from csv files
+ defread_datasets():
+genuine_users=pd.read_csv("")
+fake_users=pd.read_csv("")
+#printgenuine_users.columns
+#printgenuine_users.describe()
+#printfake_users.describe()
+x=pd.concat([genuine_users,fake_users])
+y=len(fake_users)*[0]+len(genuine_users)*[1]
+returnx,y
+function for predicting sex using name of person
+In[59]: defpredict_sex(name):
+sex_predictor=gender.Detector(unknown_value=u"unknown",case_sensitiv
+e=False)
+first_name=name.str.split('').str.get(0)
+sex=first_name.apply(sex_predictor.get_gender)
+sex_dict={'female':-2,'mostly_female':-1,'unknown':0,'mostly_mal
+e':1,'male':2}
+sex_code=sex.map(sex_dict).astype(int)
+returnsex_code
+function for feature engineering
+ defextract_features(x):
+lang_list=list(enumerate(np.unique(x['lang'])))
+lang_dict={name:ifori,nameinlang_list}
+x.loc[:,'lang_code']=x['lang'].map(lambdax:lang_dict[x]).astype(i
+nt)
+x.loc[:,'sex_code']=predict_sex(x['name'])
+feature_columns_to_use=['statuses_count','followers_count','friend
+s_count','favourites_count','listed_count','sex_code','lang_code']
+x=x.loc[:,feature_columns_to_use]
+returnx
+function for ploting learning curve
+defplot_learning_curve(estimator,title,X,y,ylim=None,cv=None,
+n_jobs=1,train_sizes=np.linspace(.1,1.0,5)):
+plt.figure()
+plt.title(title)
+ifylimisnotNone:
+plt.ylim(*ylim)
+plt.xlabel("Trainingexamples")
+plt.ylabel("Score")
+train_sizes,train_scores,test_scores=learning_curve(
+estimator,X,y,cv=cv,n_jobs=n_jobs,train_sizes=train_sizes)
+train_scores_mean=np.mean(train_scores,axis=1)
+train_scores_std=np.std(train_scores,axis=1)
+test_scores_mean=np.mean(test_scores,axis=1)
+test_scores_std=np.std(test_scores,axis=1)
+plt.grid()
+plt.fill_between(train_sizes,train_scores_mean-train_scores_std,
+train_scores_mean+train_scores_std,alpha=0.1,
+color="r")
+plt.fill_between(train_sizes,test_scores_mean-test_scores_std,
+test_scores_mean+test_scores_std,alpha=0.1,colo
+r="g")
+plt.plot(train_sizes,train_scores_mean,'o-',color="r",
+label="Trainingscore")
+plt.plot(train_sizes,test_scores_mean,'o-',color="g",
+label="Cross-validationscore")
+plt.legend(loc="best")
+returnplt
+function for plotting confusion matrix
+ defplot_confusion_matrix(cm,title='Confusionmatrix',cmap=plt.cm.Blue
+s):
+target_names=['Fake','Genuine']
+plt.imshow(cm,interpolation='nearest',cmap=cmap)
+plt.title(title)
+plt.colorbar()
+tick_marks=np.arange(len(target_names))
+plt.xticks(tick_marks,target_names,rotation=45)
+plt.yticks(tick_marks,target_names)
+plt.tight_layout()
+plt.ylabel('Truelabel')
+plt.xlabel('Predictedlabel')
+#function for plotting ROC curve
+
+ defplot_roc_curve(y_test,y_pred):
+false_positive_rate,true_positive_rate,thresholds=roc_curve(y_tes
+t,y_pred)
+print"FalsePositiverate:",false_positive_rate
+print"TruePositiverate:",true_positive_rate
+roc_auc=auc(false_positive_rate,true_positive_rate)
+plt.title('ReceiverOperatingCharacteristic')
+plt.plot(false_positive_rate,true_positive_rate,'b',
+label='AUC=%0.2f'%roc_auc)
+plt.legend(loc='lowerright')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('TruePositiveRate')
+plt.xlabel('FalsePositiveRate')
+plt.show()
+#Function for training data using Support Vector Machine
+ deftrain(X_train,y_train,X_test):
+"""TrainsandpredictsdatasetwithaSVMclassifier"""
+#Scalingfeatures
+X_train=preprocessing.scale(X_train)
+X_test=preprocessing.scale(X_test)
+Cs=10.0**np.arange(-2,3,.5)
+gammas=10.0**np.arange(-2,3,.5)
+param=[{'gamma':gammas,'C':Cs}]
+cvk=StratifiedKFold(y_train,n_folds=5)
+classifier=SVC()
+clf=GridSearchCV(classifier,param_grid=param,cv=cvk)
+clf.fit(X_train,y_train)
+print("Thebestclassifieris:",clf.best_estimator_)
+clf.best_estimator_.fit(X_train,y_train)
+#Estimatescore
+scores=cross_validation.cross_val_score(clf.best_estimator_,X_trai
+n,y_train,cv=5)
+printscores
+print('Estimatedscore:%0.5f(+/-%0.5f)'%(scores.mean(),scores.st
+d()/2))
+title='LearningCurves(SVM,rbfkernel,$\gamma=%.6f$)'%clf.best_e
+stimator_.gamma
+plot_learning_curve(clf.best_estimator_,title,X_train,y_train,c
+v=5)
+plt.show()
+#Predictclass
+y_pred=clf.best_estimator_.predict(X_test)
+returny_test,y_pred
+
+ print("readingdatasets.....\n")
+x,y=read_datasets()
+int"extractingfeatues.....\n"
+x=extract_features(x)
+printx.columns
+printx.describe()
+ print"splitingdatasetsintrainandtestdataset...\n"
+X_train,X_test,y_train,y_test=train_test_split(x,y,test_size=0.20,random_state=44)
+Index([u'statuses_count',u'followers_count',u'friends_count',
+u'favourites_count',u'listed_count',u'sex_code',u'lang_code'],
+dtype='object')
+splitingdatasetsintrainandtestdataset...
+In[79]: print("trainingdatasets.......\n")
+y_test,y_pred=train(X_train,y_train,X_test)
+ print('ClassificationAccuracyonTestdataset:',accuracy_score(y_test,y_pred))
+('Thebestclassifieris:',SVC(C=1.0,cache_size=200,class_weight=None,coef0=0.0,decision_function_shape=None,degree=3,gamma=31.622776601683793,kernel='rbf',max_iter=-1,probability=False,random_state=None,
+shrinking=True,tol=0.001,verbose=False))
+Estimatedscore:0.93301(+/-0.00651)
+ClassificationAccuracyonTestdataset: 0.904255319149
+In[82]: cm=confusion_matrix(y_test,y_pred)
+print('Confusionmatrix,withoutnormalization')
+print(cm)
+plot_confusion_matrix(cm)
+ cm_normalized=cm.astype('float')/cm.sum(axis=1)[:,np.newaxis]
+print('Normalizedconfusionmatrix')
+print(cm_normalized)
+plot_confusion_matrix(cm_normalized,title='Normalizedconfusionmatrix')
+ print(classification_report(y_test,y_pred,target_names=['Fake','Genuin
+e']))
+ plot_roc_curve(y_test,y_pred)
+
+ importsys
+importcsv
+importdatetime
+importnumpyasnp
+importpandasaspd
+importmatplotlib.pyplotasplt
+fromdatetimeimportdatetime
+importsexmachine.detectorasgender
+fromsklearn.preprocessingimportImputer
+fromsklearnimportcross_validation
+fromsklearnimportmetrics
+fromsklearnimportpreprocessing
+fromsklearn.metricsimportroc_curve,auc
+from sklearn.ensembleimportRandomForestClassifier
+fromsklearn.cross_validationimportStratifiedKFold,train_test_split
+fromsklearn.grid_searchimportGridSearchCV
+fromsklearn.metricsimportaccuracy_score
+fromsklearn.learning_curveimportlearning_curve
+fromsklearn.metricsimportclassification_report
+fromsklearn.metricsimportconfusion_matrix
+%matplotlibinline
+function for reading dataset from csv files
+ defread_datasets():
+#Readsusersprofilefromcsvfiles
+#we do not have the dataset of profiles
+genuine_users=pd.read_csv("")
+fake_users=pd.read_csv(")
+#printgenuine_users.columns
+#printgenuine_users.describe()
+#printfake_users.describe()
+x=pd.concat([genuine_users,fake_users])
+y=len(fake_users)*[0]+len(genuine_users)*[1]
+returnx,y
+#function for predicting sex using name of person
+
+ defpredict_sex(name):
+sex_predictor=gender.Detector(unknown_value=u"unknown",case_sensitive=False)
+first_name=name.str.split('').str.get(0)
+sex=first_name.apply(sex_predictor.get_gender)
+sex_dict={'female':-2,'mostly_female':-1,'unknown':0,'mostly_mal
+e':1,'male':2}
+sex_code=sex.map(sex_dict).astype(int)
+returnsex_code
+#function for feature engineering
+ defextract_features(x):
+lang_list=list(enumerate(np.unique(x['lang'])))
+lang_dict={name:ifori,nameinlang_list}
+x.loc[:,'lang_code']=x['lang'].map(lambdax:lang_dict[x]).astype(i
+nt)
+x.loc[:,'sex_code']=predict_sex(x['name'])
+feature_columns_to_use=['statuses_count','followers_count','friend
+s_count','favourites_count','listed_count','sex_code','lang_code']
+x=x.loc[:,feature_columns_to_use]
+returnx
+#function for ploting learning curve
+
+ defplot_learning_curve(estimator,title,X,y,ylim=None,cv=None,n_jobs=1,train_sizes=np.linspace(.1,1.0,5)):
+plt.figure()
+plt.title(title)
+ifylimisnotNone:
+plt.ylim(*ylim)
+plt.xlabel("Trainingexamples")
+plt.ylabel("Score")
+train_sizes,train_scores,test_scores=learning_curve(
+estimator,X,y,cv=cv,n_jobs=n_jobs,train_sizes=train_sizes)
+train_scores_mean=np.mean(train_scores,axis=1)
+train_scores_std=np.std(train_scores,axis=1)
+test_scores_mean=np.mean(test_scores,axis=1)
+test_scores_std=np.std(test_scores,axis=1)
+plt.grid()
+plt.fill_between(train_sizes,train_scores_mean-train_scores_std,
+train_scores_mean+train_scores_std,alpha=0.1,
+color="r")
+plt.fill_between(train_sizes,test_scores_mean-test_scores_std,test_scores_mean+test_scores_std,alpha=0.1,color="g")
+plt.plot(train_sizes,train_scores_mean,'o-',color="r",
+label="Trainingscore")
+plt.plot(train_sizes,test_scores_mean,'o-',color="g",
+label="Cross-validationscore")
+plt.legend(loc="best")
+returnplt
+function for plotting confusion matrix
+defplot_confusion_matrix(cm,title='Confusionmatrix',cmap=plt.cm.Blues)
+target_names=['Fake','Genuine']
+plt.imshow(cm,interpolation='nearest',cmap=cmap)
+plt.title(title)
+plt.colorbar()
+tick_marks=np.arange(len(target_names))
+plt.xticks(tick_marks,target_names,rotation=45)
+plt.yticks(tick_marks,target_names)
+plt.tight_layout()
+plt.ylabel('Truelabel')
+plt.xlabel('Predictedlabel')
+function for plotting ROC curve
+In[62]: defplot_roc_curve(y_test,y_pred):
+false_positive_rate,true_positive_rate,thresholds=roc_curve(y_tes
+t,y_pred)
+print("FalsePositiverate:",false_positive_rate)
+print("TruePositiverate:",true_positive_rate)
+roc_auc=auc(false_positive_rate,true_positive_rate)
+plt.title('ReceiverOperatingCharacteristic')
+plt.plot(false_positive_rate,true_positive_rate,'b',
+label='AUC=%0.2f'%roc_auc)
+plt.legend(loc='lowerright')
+plt.plot([0,1],[0,1],'r--')
+plt.xlim([-0.1,1.2])
+plt.ylim([-0.1,1.2])
+plt.ylabel('TruePositiveRate')
+plt.xlabel('FalsePositiveRate')
+plt.show()
+#Function for training data using Random Forest 
+deftrain(X_train,y_train,X_test):
+clf=RandomForestClassifier(n_estimators=40,oob_score=True)
+clf.fit(X_train,y_train)
+print("Thebestclassifieris:",clf)
+#Estimatescore
+scores=cross_validation.cross_val_score(clf,X_train,y_train,cv=5)
+printscores
+print('Estimatedscore:%0.5f(+/-%0.5f)'%(scores.mean(),scores.st
+d()/2))
+title='LearningCurves(RandomForest)'
+plot_learning_curve(clf,title,X_train,y_train,cv=5)
+plt.show()
+#Predict
+y_pred=clf.predict(X_test)
+returny_test,y_pred
+In[64]: print"readingdatasets.....\n"
+x,y=read_datasets()
+x.describe()
+ print"extractingfeatues.....\n"
+x=extract_features(x)
+printx.columns
+printx.describe()
+Index([u'statuses_count',u'followers_count',u'friends_count',
+u'favourites_count',u'listed_count',u'sex_code',u'lang_code'],
+dtype='object')
+print"splitingdatasetsintrainandtestdataset...\n"
+X_train,X_test,y_train,y_test=train_test_split(x,y,test_size=0.20,ran
+dom_state=44)
+ print"trainingdatasets.......\n"
+y_test,y_pred=train(X_train,y_train,X_test)
+ print'ClassificationAccuracyonTestdataset:',accuracy_score(y_test,
+y_pred)
+('Thebestclassifieris:',RandomForestClassifier(bootstrap=True,clas
+s_weight=None,criterion='gini',
+max_depth=None,max_features='auto',max_leaf_nodes=None,
+min_samples_leaf=1,min_samples_split=2,
+min_weight_fraction_leaf=0.0,n_estimators=40,n_jobs=1,
+oob_score=True,random_state=None,verbose=0,warm_start=False))
+ cm=confusion_matrix(y_test,y_pred)
+print('Confusionmatrix,withoutnormalization')
+print(cm)
+plot_confusion_matrix(cm)
+ cm_normalized=cm.astype('float')/cm.sum(axis=1)[:,np.newaxis]
+print('Normalizedconfusionmatrix')
+print(cm_normalized)
+plot_confusion_matrix(cm_normalized,title='Normalizedconfusionmatrix')
+ print(classification_report(y_test,y_pred,target_names=['Fake','Genuin
+e']))
+ plot_roc_curve(y_test,y_pred)
